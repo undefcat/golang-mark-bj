@@ -9,7 +9,9 @@ $ mark program input output
 ```
 
 - `program`: programs to be graded
-- `input`: input case (only utf-8 encoded text)
-- `output`: output case (only utf-8 encoded text)
+- `input`: directory of input cases (only utf-8 encoded text)
+- `output`: directory of output cases (only utf-8 encoded text)
 
-If the answer is correct, **CORRECT!** will be printed.
+input/output file pairs must have the same name.
+
+If the answer is correct, `case <filename> CORRECT!` will be printed.

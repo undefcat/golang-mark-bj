@@ -3,53 +3,104 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 )
 
-func main() {
-	arguments := os.Args
-	if len(arguments) != 4 {
-		fmt.Println("Usage: mark.exe program.exe input output")
-		os.Exit(1)
-	}
+type testCase struct {
+	name   string
+	result bool
+}
 
-	program, input, output := arguments[1], arguments[2], arguments[3]
+var (
+	inputPath   string
+	outputPath  string
+	programPath string
+)
 
-	out, err := os.Open(output)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func execute(tc testCase, c chan <- testCase) {
 	var buf bytes.Buffer
-	_, err = buf.ReadFrom(out)
+	cmd := exec.Command(programPath)
+
+	in, err := os.Open(filepath.Join(inputPath, tc.name))
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	answer := buf.String()
-	buf.Reset()
-
-	cmd := exec.Command(program)
-	in, err := os.Open(input)
+	answer, err := ioutil.ReadFile(filepath.Join(outputPath, tc.name))
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	cmd.Stdin = in
 	cmd.Stdout = &buf
-
 	err = cmd.Run()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	result := buf.String()
-	if answer != result {
-		fmt.Printf("expected: %s\n", answer)
-		fmt.Printf("result: %s\n", result)
-	} else {
-		fmt.Printf("CORRECT!\n")
+	answer = bytes.TrimSpace(answer)
+	result := bytes.TrimSpace(buf.Bytes())
+
+	strAns := string(answer)
+	strRes := string(result)
+
+	tc.result = strAns == strRes
+	c <- tc
+}
+
+func main() {
+	args := os.Args
+	if len(args) != 4 {
+		fmt.Println("Usage: mark program input output")
+		os.Exit(1)
+	}
+
+	programPath, inputPath, outputPath = args[1], args[2], args[3]
+
+	inputInfo, err := os.Lstat(inputPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if inputInfo.IsDir() {
+		dir, err := os.Open(inputPath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// -1 means read all files in dir.
+		inputFiles, err := dir.Readdir(-1)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		tcChan := make(chan testCase, 3)
+
+		i := 0
+		for _, inputFile := range inputFiles {
+			tc := testCase{inputFile.Name(), false}
+			go execute(tc, tcChan)
+			i++
+		}
+
+		for {
+			tc := <-tcChan
+			i--
+
+			if tc.result {
+				fmt.Printf("case %s CORRECT!\n", tc.name)
+			} else {
+				fmt.Printf("case %s WRONG!\n", tc.name)
+			}
+
+			if i == 0 {
+				close(tcChan)
+				break
+			}
+		}
 	}
 }
